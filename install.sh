@@ -1952,6 +1952,51 @@ checkPort() {
     fi
 }
 
+# 获取可用的高位端口
+findAvailableHighPort() {
+    local minPort=${1:-10000}
+    local maxPort=${2:-60000}
+    local maxAttempts=50
+    local candidatePort=
+    local attempt=0
+
+    while ((attempt < maxAttempts)); do
+        candidatePort=$((RANDOM % (maxPort - minPort + 1) + minPort))
+        if ! lsof -i "tcp:${candidatePort}" | grep -q LISTEN; then
+            echo "${candidatePort}"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    echoContent red " ---> 未找到可用的高位端口，请稍后重试"
+    exit 0
+}
+
+# 端口占用时自动切换到高位端口
+resolveOccupiedPortWithHighPort() {
+    local requestedPort=$1
+    local currentPort=$2
+    local fallbackPort=
+
+    if [[ -z "${requestedPort}" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${currentPort}" && "${requestedPort}" == "${currentPort}" ]]; then
+        echo "${requestedPort}"
+        return 0
+    fi
+
+    if lsof -i "tcp:${requestedPort}" | grep -q LISTEN; then
+        fallbackPort=$(findAvailableHighPort 10000 60000)
+        echo "${fallbackPort}"
+        return 0
+    fi
+
+    echo "${requestedPort}"
+}
+
 # 安装TLS
 installTLS() {
     echoContent skyBlue "\n进度  $1/${totalProgress} : 申请TLS证书\n"
@@ -4458,6 +4503,8 @@ EOF
         echoContent skyBlue "\n开始配置VLESS+Reality+Vision协议端口"
         echo
         mapfile -t result < <(initSingBoxPort "${singBoxVLESSRealityVisionPort}")
+        result[-1]=$(resolveOccupiedPortWithHighPort "${result[-1]}" "${singBoxVLESSRealityVisionPort}")
+        allowPort "${result[-1]}"
         echoContent green "\n ---> VLESS_Reality_Vision端口：${result[-1]}"
         cat <<EOF >/etc/v2ray-agent/sing-box/conf/config/07_VLESS_vision_reality_inbounds.json
 {
@@ -6217,9 +6264,9 @@ updateV2RayAgent() {
     echoContent skyBlue "\n进度  $1/${totalProgress} : 更新v2ray-agent脚本"
     rm -rf /etc/v2ray-agent/install.sh
     if [[ "${release}" == "alpine" ]]; then
-        wget -c -q -P /etc/v2ray-agent/ -N --no-check-certificate "https://raw.githubusercontent.com/mack-a/v2ray-agent/master/install.sh"
+        wget -c -q -P /etc/v2ray-agent/ -N --no-check-certificate "https://raw.githubusercontent.com/shenghuo2/v-agent/master/install.sh"
     else
-        wget -c -q "${wgetShowProgressStatus}" -P /etc/v2ray-agent/ -N --no-check-certificate "https://raw.githubusercontent.com/mack-a/v2ray-agent/master/install.sh"
+        wget -c -q "${wgetShowProgressStatus}" -P /etc/v2ray-agent/ -N --no-check-certificate "https://raw.githubusercontent.com/shenghuo2/v-agent/master/install.sh"
     fi
 
     sudo chmod 700 /etc/v2ray-agent/install.sh
@@ -6230,7 +6277,7 @@ updateV2RayAgent() {
     echoContent yellow " ---> 请手动执行[vasma]打开脚本"
     echoContent green " ---> 当前版本：${version}\n"
     echoContent yellow "如更新不成功，请手动执行下面命令\n"
-    echoContent skyBlue "wget -P /root -N --no-check-certificate https://raw.githubusercontent.com/mack-a/v2ray-agent/master/install.sh && chmod 700 /root/install.sh && /root/install.sh"
+    echoContent skyBlue "wget -P /root -N --no-check-certificate https://raw.githubusercontent.com/shenghuo2/v-agent/master/install.sh && chmod 700 /root/install.sh && /root/install.sh"
     echo
     exit 0
 }
@@ -9384,8 +9431,8 @@ initXrayRealityPort() {
         #        fi
         if [[ -n "${realityPort}" && "${xrayVLESSRealityPort}" == "${realityPort}" ]]; then
             handleXray stop
-        else
-            checkPort "${realityPort}"
+        elif [[ -n "${realityPort}" ]]; then
+            realityPort=$(resolveOccupiedPortWithHighPort "${realityPort}" "${xrayVLESSRealityPort}")
         fi
     fi
     if [[ -z "${realityPort}" ]]; then

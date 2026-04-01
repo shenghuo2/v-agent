@@ -27,8 +27,8 @@ Xray-core/sing-box 一键脚本快速安装
 
 ### 安装
 
-```
-wget -P /root -N --no-check-certificate "https://raw.githubusercontent.com/mack-a/v2ray-agent/master/install.sh" && chmod 700 /root/install.sh && /root/install.sh
+```bash
+wget -P /root -N --no-check-certificate "https://raw.githubusercontent.com/shenghuo2/v-agent/master/install.sh" && chmod 700 /root/install.sh && /root/install.sh
 ```
 
 ### 使用
